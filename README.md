@@ -80,7 +80,8 @@ By default, the discovery plugin will look for all pods with a label "akka-clust
 You can override the label selector in the hocon file to any valid Kubernetes label selector instead.
 
 Because we cannot determine the Akka cluster port based on the Kubernetes API alone, the port for each pod must be specific (i.e. no using port zero to get a random port).
-By default, the plugin will assume all other pods use the same port as the local one, but will in fact look for an override each pod's annotations under the key "akka.remote.dot-netty.tcp.port".
+By default, the plugin will assume all other pods use the same port as the local one, but will in fact look for an override in each discovered pod's annotations, under 
+the key "akka.remote.dot-netty.tcp.port".
 If you have multiple applications running in the same cluster, running on different ports, you can simply annotate each deployment with the application's port.
 
 Example:

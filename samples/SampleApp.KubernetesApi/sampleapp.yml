@@ -1,0 +1,30 @@
+﻿apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampleapp
+  labels:
+    app: sampleapp
+spec:
+  selector:
+    matchLabels:
+      app: sampleapp
+  replicas: 6
+  template:
+    metadata:
+      labels:
+        app: sampleapp
+        akka: SampleApp
+        env: Development
+    spec:
+      containers:
+      - name: sampleapp
+        image: sampleapp:latest
+        ports:
+        - containerPort: 2551
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: "250m"
+          requests:
+            memory: 128Mi
+            cpu: "80m"

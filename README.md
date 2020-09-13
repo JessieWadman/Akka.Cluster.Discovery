@@ -7,6 +7,7 @@ Current status:
 - [ ] Lockfile (dev only)
 - [x] Akka.Cluster.Discovery.Consul
 - [ ] Akka.Cluster.Discovery.Etcd
+- [x] Akka.Cluster.Discovery.KubernetesApi
 - [ ] Akka.Cluster.Discovery.ServiceFabric
 - [ ] Akka.Cluster.Discovery.Zookeeper
 
@@ -41,6 +42,86 @@ using (var system = ActorSystem.Create())
 	Console.ReadLine();
 }
 ```
+
+This example uses [Kubernetes API](https://github.com/kubernetes-client/csharp) for cluster seed node discovery.
+
+```csharp
+using System;
+using Akka.Actor;
+using Akka.Configuration;
+using Akka.Cluster.Discovery;
+
+var myPodIp = GetLocalIPAddress();
+var allMyPodsAreOnPort = 2551;
+
+var config = ConfigurationFactory.ParseString(@"
+	akka {
+		actor.provider = cluster
+        remote.dot-netty.tcp {
+            hostname = """ + myPodIp + @"""
+            port = " + allMyPodsAreOnPort.ToString() + @" 
+        }
+        cluster.roles = [sample,demo]
+		cluster.discovery {
+			provider = akka.cluster.discovery.k8s
+			k8s {
+		        refresh-interval = 10s
+                namespace = ""default""
+                label-selector = ""akka = SampleApp,env = Development""
+            }
+		}
+	}");
+
+using var system = ActorSystem.Create("sample", config);
+await ClusterDiscovery.JoinAsync(system);
+
+using (var system = ActorSystem.Create())
+{
+	// this line triggers discovery service initialization
+	// and will join or initialize current actor system to the cluster
+	await ClusterDiscovery.JoinAsync(system);
+
+	Console.ReadLine();
+}
+```
+
+The deployment spec for the sample is as follows:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sampleapp
+  labels:
+    app: sampleapp
+spec:
+  selector:
+    matchLabels:
+      app: sampleapp
+  replicas: 6
+  template:
+    metadata:
+      labels:
+        app: sampleapp
+        akka: SampleApp
+        env: Development
+    spec:
+      containers:
+      - name: sampleapp
+        image: sampleapp:latest
+        ports:
+        - containerPort: 2551
+        resources:
+          limits:
+            memory: 256Mi
+            cpu: "250m"
+          requests:
+            memory: 128Mi
+            cpu: "80m"
+```
+
+Notice that the spec is adding two application specific labels; akka and env. We use these in the label selector in the hocon configuration to determine
+which pods should be discovered. You can use any label selector that you want. Those are just for demo purposes.
 
 ## Configuration
 

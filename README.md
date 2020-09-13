@@ -43,7 +43,7 @@ using (var system = ActorSystem.Create())
 }
 ```
 
-This example uses [Kubernetes API](https://github.com/kubernetes-client/csharp) for cluster seed node discovery.
+This example uses [Kubernetes built-in API](https://github.com/kubernetes-client/csharp) for cluster seed node discovery.
 
 ```csharp
 var myPodIp = GetLocalIPAddress();

@@ -67,15 +67,8 @@ namespace Akka.Cluster.Discovery.KubernetesApi
         private Address DeterminePodAddress(V1Pod pod)
         {
             if (!int.TryParse(pod.GetAnnotation("akka.remote.dot-netty.tcp.port"), out var port))
-            {
                 port = Cluster.SelfAddress.Port ?? 0;
-                logger.Info($"Port defaulted to {port} for {pod.Status.PodIP}");
-            }
-            else
-                logger.Info($"Port read as {port} from annotations for {pod.Status.PodIP}");
-
             var host = pod.Status.PodIP;
-
             return new Address("akka.tcp", actorSystemName, host, port);
         }
 

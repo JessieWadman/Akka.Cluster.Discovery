@@ -20,7 +20,7 @@ spec:
     spec:
       containers:
       - name: sampleapp
-        image: localhost:5000/sampleapp:20
+        image: localhost:5000/sampleapp:latest
         ports:
         - containerPort: 2551
         resources:

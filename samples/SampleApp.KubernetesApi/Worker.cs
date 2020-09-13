@@ -38,14 +38,13 @@ namespace SampleApp.KubernetesApi
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
             var myPodIp = GetLocalIPAddress();
-            var allMyPodsAreOnPort = 2551;
 
             var config = ConfigurationFactory.ParseString(@"
 	            akka {
 		            actor.provider = cluster
                     remote.dot-netty.tcp {
                         hostname = """ + myPodIp + @"""
-                        port = " + allMyPodsAreOnPort.ToString() + @" 
+                        port = 2551 
                     }
                     cluster.roles = [sample,demo]
 		            cluster.discovery {
@@ -53,7 +52,7 @@ namespace SampleApp.KubernetesApi
 			            k8s {
 		                    refresh-interval = 10s
                             namespace = ""default""
-                            label-selector = ""akka = SampleApp,env = Development""
+                            label-selector = ""akka-cluster=sample,env=Development""
                         }
 		            }
 	            }");

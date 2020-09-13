@@ -33,8 +33,8 @@ namespace Akka.Cluster.Discovery.KubernetesApi
         private IKubernetes k8s;
         private readonly ILoggingAdapter logger = Context.GetLogger();
         
-        private readonly int tcpPort;
         private readonly string actorSystemName;
+        private readonly string labelSelector;
 
         public KubernetesDiscoveryService(Config config) 
             : this(new KubernetesSettings(config))
@@ -48,24 +48,14 @@ namespace Akka.Cluster.Discovery.KubernetesApi
 
         public KubernetesDiscoveryService(IKubernetes kubernetesClient, KubernetesSettings settings) : base(settings)
         {
-            this.tcpPort = ((ExtendedActorSystem)Context.System).Provider.DefaultAddress.Port ?? Context.System.Settings.Config.GetInt("akka.remote.dot-netty.tcp.port");
             this.actorSystemName = ((ExtendedActorSystem)Context.System).Provider.DefaultAddress.System;
             this.k8s = kubernetesClient;
-            this.settings = settings;            
+            this.settings = settings;
+
+            labelSelector = $"akka-cluster={actorSystemName}";
+            if (!string.IsNullOrWhiteSpace(settings.LabelSelector))
+                labelSelector = settings.LabelSelector;
         }
-
-        protected override void Ready()
-        {
-            base.Ready();
-            Receive<RestartClient>(_ =>
-            {
-                Log.Debug("Restarting k8s client...");
-
-                k8s.Dispose();
-                k8s = CreateKubernetesClient(settings);
-            });
-        }
-
 
         private static IKubernetes CreateKubernetesClient(KubernetesSettings settings)
         {
@@ -74,24 +64,43 @@ namespace Akka.Cluster.Discovery.KubernetesApi
             return new Kubernetes(k8sClientConfig);
         }
 
+        private Address DeterminePodAddress(V1Pod pod)
+        {
+            if (!int.TryParse(pod.GetAnnotation("akka.remote.dot-netty.tcp.port"), out var port))
+            {
+                port = Cluster.SelfAddress.Port ?? 0;
+                logger.Info($"Port defaulted to {port} for {pod.Status.PodIP}");
+            }
+            else
+                logger.Info($"Port read as {port} from annotations for {pod.Status.PodIP}");
+
+            var host = pod.Status.PodIP;
+
+            return new Address("akka.tcp", actorSystemName, host, port);
+        }
+
         protected override async Task<IEnumerable<Address>> GetNodesAsync(bool onlyAlive)
         {
             logger.Debug("Refreshing nodes from k8s...");
             try
             {
-                var pods = await k8s.ListNamespacedPodAsync(settings.KubernetesNamespace, labelSelector: settings.LabelSelector);          
-                
-                logger.Debug($"{pods.Items.Count} pods found: {string.Join(", ", pods.Items.Select(pod => $"{pod.Status.PodIP}:{pod.Status.Phase} ({string.Join("; ", pod.Status.Conditions.Select(c => $"{c.Type}={c.Status} (Msg: {c.Message}, Reason: {c.Reason})"))})"))}");
+                var pods = await k8s.ListNamespacedPodAsync(settings.KubernetesNamespace, labelSelector: settings.LabelSelector);
+
+#if (DEBUG)
+                logger.Debug($"{pods.Items.Count} matching pods found: {string.Join(", ", pods.Items.Select(pod => $"{pod.Status.PodIP}:{pod.Status.Phase} ({string.Join("; ", pod.Status.Conditions.Select(c => $"{c.Type}={c.Status} (Msg: {c.Message}, Reason: {c.Reason})"))})"))}");
+#endif
 
                 var nodes = pods.Items
-                    .Where(pod => pod?.Status?.PodIP != null && (!onlyAlive || (ConditionsOK(pod.Status.Conditions) && StatusOK(pod.Status))))
-                    .Select(pod => new Address("akka.tcp", actorSystemName, pod.Status.PodIP, this.tcpPort))
+                    .Where(IsReady)
+                    .Select(DeterminePodAddress)
                     .ToList();
 
-                nodes.Add(Cluster.SelfAddress);
-                nodes = nodes.Distinct().ToList();
+                if (!nodes.Contains(Cluster.SelfAddress))
+                    nodes.Add(Cluster.SelfAddress);
 
-                logger.Debug($"{nodes.Count} nodes found: {string.Join(", ", nodes.Select(address => address.ToString()))}");
+#if (DEBUG)
+                logger.Debug($"{nodes.Count} nodes discovered: {string.Join(", ", nodes.Select(address => address.ToString()))}");
+#endif
 
                 return nodes;
             }
@@ -100,16 +109,17 @@ namespace Akka.Cluster.Discovery.KubernetesApi
                 logger.Error(error, "Could not poll k8s API for nodes: {0}", error);
                 throw;
             }
-        }
 
-        private bool ConditionsOK(IList<V1PodCondition> conditions)
-        {
-            return conditions.All(x => x.Status.Equals("True"));
-        }
+            bool IsReady(V1Pod pod)
+            {
+                if (pod?.Status?.PodIP == null)
+                    return false;
 
-        private bool StatusOK(V1PodStatus status)
-        {
-            return status.Phase.Equals("Running");
+                if (!onlyAlive)
+                    return true;
+
+                return pod.Status.Phase.Equals("Running") && pod.Status.Conditions.All(x => x.Status.Equals("True"));
+            }
         }
 
         protected override Task RegisterNodeAsync(MemberEntry node) => Task.CompletedTask;

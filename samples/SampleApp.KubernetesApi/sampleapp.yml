@@ -13,12 +13,14 @@ spec:
     metadata:
       labels:
         app: sampleapp
-        akka: SampleApp
+        akka-cluster: sample
         env: Development
+      annotations:
+        akka.remote.dot-netty.tcp.port: "2551"
     spec:
       containers:
       - name: sampleapp
-        image: sampleapp:latest
+        image: localhost:5000/sampleapp:20
         ports:
         - containerPort: 2551
         resources:

@@ -66,10 +66,7 @@ var config = ConfigurationFactory.ParseString(@"
     }
 }");
 
-using var system = ActorSystem.Create("sample", config);
-await ClusterDiscovery.JoinAsync(system);
-
-using (var system = ActorSystem.Create())
+using (var system = ActorSystem.Create("sample", config))
 {
 	// this line triggers discovery service initialization
 	// and will join or initialize current actor system to the cluster
